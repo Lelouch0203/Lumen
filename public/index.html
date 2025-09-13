@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFi Chat</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- User Setup Modal -->
+    <div id="userSetupModal" class="modal">
+        <div class="modal-content">
+            <h2>Welcome to WiFi Chat</h2>
+            <p>Enter your display name to get started:</p>
+            <input type="text" id="displayNameInput" placeholder="Your display name" maxlength="30">
+            <input type="url" id="avatarUrlInput" placeholder="Avatar image URL (optional)">
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                <input type="checkbox" id="themeToggleInput">
+                <label for="themeToggleInput">Use light theme</label>
+            </div>
+            <button id="joinNetworkBtn" class="btn-primary">Join Network</button>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="appContainer" class="hidden">
+        <!-- Header -->
+        <header class="app-header">
+            <h1 class="brand">WiFi Chat</h1>
+            <div class="user-info">
+                <button id="themeToggleBtn" class="btn-secondary">Toggle Theme</button>
+                <span id="currentUserName"></span>
+                <span id="currentUserAvatar" class="avatar"></span>
+                <button id="editProfileBtn" class="btn-secondary">Edit Profile</button>
+                <span id="connectionStatus" class="status-indicator"></span>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="tab-btn active" data-tab="lobby">Lobby</button>
+            <button class="tab-btn" data-tab="public-rooms">Public Rooms</button>
+            <button class="tab-btn" data-tab="private-rooms">Private Rooms</button>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Lobby Tab -->
+            <div id="lobby" class="tab-content active">
+                <div class="lobby-header">
+                    <div class="lobby-stats">
+                        <div class="stat-card">
+                            <div class="stat-number" id="roomCount">0</div>
+                            <div class="stat-label">Joined Rooms</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="messageCount">0</div>
+                            <div class="stat-label">Messages Today</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="content-grid">
+                    <div class="section">
+                        <div class="section-header">
+                            <h3>🏠 My Rooms</h3>
+                            <span class="section-badge" id="myRoomsBadge">0</span>
+                        </div>
+                        <div id="myRooms" class="enhanced-tile-grid">
+                            <div class="empty-state" id="emptyRooms">
+                                <div class="empty-icon">🏠</div>
+                                <p>No rooms joined yet</p>
+                                <small>Create or join a room to start chatting!</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="recent-activity">
+                    <div class="section-header">
+                        <h3>📈 Recent Activity</h3>
+                    </div>
+                    <div id="recentActivity" class="activity-feed">
+                        <div class="empty-state">
+                            <div class="empty-icon">📈</div>
+                            <p>No recent activity</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Public Rooms Tab -->
+            <div id="public-rooms" class="tab-content">
+                <div class="section-header">
+                    <h3>Public Rooms</h3>
+                    <button id="createPublicRoomBtn" class="btn-primary">Create Room</button>
+                </div>
+                <div id="publicRoomsList" class="tile-grid"></div>
+            </div>
+
+            <!-- Private Rooms Tab -->
+            <div id="private-rooms" class="tab-content">
+                <div class="section-header">
+                    <h3>Private Rooms</h3>
+                    <button id="createPrivateRoomBtn" class="btn-primary">Create Room</button>
+                </div>
+                <div class="join-private-section">
+                    <input type="text" id="privateRoomPin" placeholder="Enter 4-digit PIN" maxlength="4">
+                    <button id="joinPrivateRoomBtn" class="btn-secondary">Join with PIN</button>
+                </div>
+                <div id="privateRoomsList" class="tile-grid"></div>
+            </div>
+
+        </main>
+
+        <!-- Chat Panel (Sidebar) -->
+        <aside id="chatPanel" class="chat-panel hidden">
+            <div class="chat-header">
+                <span id="chatTitle"></span>
+                <button id="closeChatBtn" class="close-btn">&times;</button>
+            </div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="typing-indicator hidden" id="typingIndicator">Someone is typing…</div>
+            <div class="chat-input-area">
+                <input type="file" id="fileInput" class="hidden" multiple>
+                <button id="attachFileBtn" class="attach-btn">📎</button>
+                <button id="emojiBtn" class="attach-btn" title="Insert emoji">😊</button>
+                <textarea id="messageInput" placeholder="Type a message..." class="message-input" rows="1"></textarea>
+                <button id="sendMessageBtn" class="send-btn">Send</button>
+            </div>
+            <div id="emojiPicker" class="emoji-picker hidden"></div>
+            <div id="fileTransferProgress" class="file-progress hidden">
+                <div class="progress-info">
+                    <span id="progressFileName"></span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Room Creation Modal -->
+    <div id="roomModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="roomModalTitle">Create Room</h3>
+            <input type="text" id="roomNameInput" placeholder="Room name" maxlength="50">
+            <div id="pinSection" class="hidden">
+                <input type="text" id="roomPinInput" placeholder="4-digit PIN" maxlength="4" pattern="[0-9]{4}">
+            </div>
+            <div class="modal-actions">
+                <button id="cancelRoomBtn" class="btn-secondary">Cancel</button>
+                <button id="createRoomBtn" class="btn-primary">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div id="editProfileModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Edit Profile</h3>
+            <input type="text" id="editNameInput" placeholder="Display name" maxlength="30">
+            <input type="url" id="editAvatarInput" placeholder="Avatar image URL">
+            <div class="modal-actions">
+                <button id="cancelEditProfileBtn" class="btn-secondary">Cancel</button>
+                <button id="saveEditProfileBtn" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notifications" class="notifications"></div>
+
+    <!-- Scripts -->
+    <!-- Socket.IO client via CDN (no integrity to avoid SRI mismatch issues) -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

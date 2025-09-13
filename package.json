@@ -1,0 +1,28 @@
+{
+  "name": "p2p-webchat",
+  "version": "1.0.0",
+  "description": "A peer-to-peer webchat application with WebRTC and Socket.IO",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "webrtc",
+    "p2p",
+    "chat",
+    "socket.io",
+    "lan"
+  ],
+  "author": "",
+  "license": "MIT"
+}
