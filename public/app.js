@@ -1049,13 +1049,16 @@ class WiFiChat {
         
         const row = document.createElement('div');
         row.className = `msg-row ${isSent ? 'sent' : 'received'}`;
+        row.dataset.timestamp = new Date(message.timestamp).getTime();
 
         const bubble = document.createElement('div');
         bubble.className = `message ${isSent ? 'sent' : 'received'}`;
         bubble.dataset.messageId = message.id;
 
         const previewHtml = this.buildPreviewHtml(message);
+        const senderName = message.userName || message.fromUserName || 'Unknown';
         bubble.innerHTML = `
+            ${!isSent ? `<div class="message-sender">${this.escapeHtml(senderName)}</div>` : ''}
             <div class="message-text">${this.escapeHtml(message.text)}</div>
             ${previewHtml}
             <div class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
@@ -1074,15 +1077,17 @@ class WiFiChat {
         const avatar = document.createElement('div');
         avatar.className = 'avatar-sm';
         let avatarUrl = null;
+        
         if (!isSent) {
-            if (this.currentChat.type === 'room') {
-                avatar.textContent = 'R';
-            }
-        } else if (this.currentUser && this.currentUser.avatarUrl) {
-            avatarUrl = this.currentUser.avatarUrl;
-            avatar.textContent = this.currentUser.name ? this.currentUser.name.charAt(0).toUpperCase() : '';
+            // For received messages, show sender's initial
+            const senderInitial = senderName.charAt(0).toUpperCase();
+            avatar.textContent = senderInitial;
         } else {
-            avatar.textContent = this.currentUser && this.currentUser.name ? this.currentUser.name.charAt(0).toUpperCase() : '';
+            // For sent messages, show current user's initial
+            if (this.currentUser && this.currentUser.avatarUrl) {
+                avatarUrl = this.currentUser.avatarUrl;
+            }
+            avatar.textContent = this.currentUser && this.currentUser.name ? this.currentUser.name.charAt(0).toUpperCase() : 'U';
         }
         if (avatarUrl) avatar.style.backgroundImage = `url('${avatarUrl}')`;
         if (isSent) {
@@ -1093,7 +1098,8 @@ class WiFiChat {
             row.appendChild(bubble);
         }
 
-        container.appendChild(row);
+        // Insert message in correct chronological position
+        this.insertMessageInOrder(container, row);
         
         // Smooth scroll to bottom
         container.scrollTo({
@@ -1102,6 +1108,29 @@ class WiFiChat {
         });
     }
 
+    insertMessageInOrder(container, newRow) {
+        const newTimestamp = parseInt(newRow.dataset.timestamp);
+        const existingRows = Array.from(container.querySelectorAll('.msg-row'));
+        
+        // Find the correct position to insert the new message
+        let insertIndex = existingRows.length;
+        for (let i = 0; i < existingRows.length; i++) {
+            const existingTimestamp = parseInt(existingRows[i].dataset.timestamp);
+            if (newTimestamp < existingTimestamp) {
+                insertIndex = i;
+                break;
+            }
+        }
+        
+        // Insert the new message at the correct position
+        if (insertIndex === existingRows.length) {
+            // Insert at the end
+            container.appendChild(newRow);
+        } else {
+            // Insert before the element at insertIndex
+            container.insertBefore(newRow, existingRows[insertIndex]);
+        }
+    }
 
     onEditMessage(messageId) {
         const el = document.querySelector(`[data-message-id="${messageId}"] .message-text`);
@@ -1206,8 +1235,15 @@ class WiFiChat {
             const container = document.getElementById('chatMessages');
             container.innerHTML = '';
             
+            // Sort messages by timestamp to ensure correct chronological order
+            messages.sort((a, b) => {
+                const timeA = new Date(a.message.timestamp).getTime();
+                const timeB = new Date(b.message.timestamp).getTime();
+                return timeA - timeB;
+            });
+            
             messages.forEach(record => {
-                const isSent = record.message.sender === this.currentUser.userId;
+                const isSent = record.message.userId === this.currentUser.userId;
                 this.displayMessage(record.message, isSent);
             });
         };
@@ -1339,49 +1375,80 @@ class WiFiChat {
             data: arrayBuffer
         });
 
-        // Display file message
+        // Create file message with timestamp
+        const fileMessage = {
+            id: fileData.id,
+            text: `📎 ${fileData.name}`,
+            timestamp: new Date().toISOString(),
+            userId: this.currentUser.userId,
+            userName: this.currentUser.name,
+            type: 'file',
+            fileData: fileData
+        };
+        
+        // Save file message to chat history
+        this.saveChatMessage(this.currentChat.id, fileMessage);
+        
+        // Display file message for sender
         this.displayFileMessage(fileData, true);
     }
 
     handleRoomFileTransferStart(data) {
-        // Only handle if we're in the correct room
-        if (this.currentChat && this.currentChat.type === 'room' && this.currentChat.id === data.roomId) {
-        this.fileTransfers.set(data.fileId, {
-            id: data.fileId,
-            name: data.fileName,
-            size: data.fileSize,
-            totalChunks: data.totalChunks,
-            chunks: new Map(),
-            progress: 0,
+        // Only handle if we're in the correct room and not from ourselves
+        if (this.currentChat && this.currentChat.type === 'room' && this.currentChat.id === data.roomId && data.fromUserId !== this.currentUser.userId) {
+            this.fileTransfers.set(data.fileId, {
+                id: data.fileId,
+                name: data.fileName,
+                size: data.fileSize,
+                totalChunks: data.totalChunks,
+                chunks: new Map(),
+                progress: 0,
                 direction: 'receiving',
                 fromUserId: data.fromUserId,
                 fromUserName: data.fromUserName
-        });
+            });
 
-        this.showFileProgress({ id: data.fileId, name: data.fileName }, 0);
-            this.displayFileMessage({ name: data.fileName, size: data.fileSize }, false, data.fromUserName);
+            this.showFileProgress({ id: data.fileId, name: data.fileName }, 0);
+            
+            // Create file message with timestamp for received files
+            const fileMessage = {
+                id: data.fileId,
+                text: `📎 ${data.fileName}`,
+                timestamp: new Date().toISOString(),
+                userId: data.fromUserId,
+                userName: data.fromUserName,
+                type: 'file',
+                fileData: { id: data.fileId, name: data.fileName, size: data.fileSize }
+            };
+            
+            // Save received file message to chat history
+            this.saveChatMessage(data.roomId, fileMessage);
+            
+            this.displayFileMessage({ id: data.fileId, name: data.fileName, size: data.fileSize, timestamp: fileMessage.timestamp }, false, data.fromUserName);
         }
     }
 
     handleRoomFileTransferChunk(data) {
-        // Only handle if we're in the correct room
-        if (this.currentChat && this.currentChat.type === 'room' && this.currentChat.id === data.roomId) {
-        const transfer = this.fileTransfers.get(data.fileId);
-        if (transfer) {
-            transfer.chunks.set(data.chunkIndex, data.chunk);
-            const progress = (transfer.chunks.size / transfer.totalChunks) * 100;
-            transfer.progress = progress;
-            this.updateFileProgress(data.fileId, progress);
+        // Only handle if we're in the correct room and not from ourselves
+        if (this.currentChat && this.currentChat.type === 'room' && this.currentChat.id === data.roomId && data.fromUserId !== this.currentUser.userId) {
+            const transfer = this.fileTransfers.get(data.fileId);
+            if (transfer) {
+                transfer.chunks.set(data.chunkIndex, data.chunk);
+                const progress = (transfer.chunks.size / transfer.totalChunks) * 100;
+                transfer.progress = progress;
+                this.updateFileProgress(data.fileId, progress);
             }
         }
     }
 
     handleRoomFileTransferEnd(data) {
-        // Only handle if we're in the correct room
-        if (this.currentChat && this.currentChat.type === 'room' && this.currentChat.id === data.roomId) {
-        const transfer = this.fileTransfers.get(data.fileId);
-        if (transfer && transfer.chunks.size === transfer.totalChunks) {
+        // Only handle if we're in the correct room and not from ourselves
+        if (this.currentChat && this.currentChat.type === 'room' && this.currentChat.id === data.roomId && data.fromUserId !== this.currentUser.userId) {
+            const transfer = this.fileTransfers.get(data.fileId);
+            if (transfer && transfer.chunks.size === transfer.totalChunks) {
                 this.assembleRoomFile(transfer);
+            } else if (transfer) {
+                this.showNotification(`File transfer incomplete for ${transfer.name}`, 'error');
             }
         }
     }
@@ -1393,6 +1460,11 @@ class WiFiChat {
             if (base64Chunk) {
                 chunks.push(this.base64ToArrayBuffer(base64Chunk));
             }
+        }
+
+        if (chunks.length !== transfer.totalChunks) {
+            this.showNotification(`File transfer incomplete. Received ${chunks.length}/${transfer.totalChunks} chunks.`, 'error');
+            return;
         }
 
         const blob = new Blob(chunks);
@@ -1407,13 +1479,7 @@ class WiFiChat {
         });
 
         this.hideFileProgress();
-        this.showNotification(`File received: ${transfer.name}`, 'success');
-        
-        // Auto-download
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = transfer.name;
-        a.click();
+        this.showNotification(`File received: ${transfer.name}. Click the download button to save it.`, 'success');
     }
 
     showFileProgress(fileData, progress) {
@@ -1443,18 +1509,24 @@ class WiFiChat {
         
         const name = fileData.name || fileData.fileName || 'file';
         const size = typeof fileData.size === 'number' ? fileData.size : (fileData.fileSize || 0);
+        const downloadButton = !isSent ? 
+            `<button class="download-btn" onclick="app.downloadFile('${fileData.id || fileData.fileId || ''}', '${name}', ${size})" title="Download file">
+                <span class="download-icon">⬇️</span> Download
+            </button>` : '';
+        
         bubble.innerHTML = `
-            <div class="file-message" onclick="app.downloadFile('${fileData.id || fileData.fileId || ''}', '${name}', ${size})">
+            <div class="file-message">
                 <div class="file-info">
                     <span class="file-icon">📎</span>
                     <div class="file-details">
                         <div class="file-name">${this.escapeHtml(name)}</div>
                         <div class="file-size">${this.formatFileSize(size)}</div>
                         ${fromUserName && !isSent ? `<div class="file-sender">from ${this.escapeHtml(fromUserName)}</div>` : ''}
+                        ${downloadButton}
                     </div>
                 </div>
             </div>
-            <div class="message-time">${new Date().toLocaleTimeString()}</div>
+            <div class="message-time">${new Date(fileData.timestamp || Date.now()).toLocaleTimeString()}</div>
         `;
 
         const avatar = document.createElement('div');

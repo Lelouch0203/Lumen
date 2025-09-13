@@ -342,7 +342,7 @@ io.on('connection', (socket) => {
         user.lastSeen = new Date();
       }
 
-      // Broadcast message to all room members
+      // Broadcast message to all room members except sender
       room.members.forEach(memberId => {
         const member = users.get(memberId);
         if (member && member.socketId !== socket.id) {
@@ -442,14 +442,20 @@ io.on('connection', (socket) => {
       }
       
       const user = users.get(userId);
-      io.to(roomId).emit('room:file:start', {
-        roomId,
-        fileId,
-        fileName: escapeHtml(fileName),
-        fileSize,
-        totalChunks,
-        fromUserId: userId,
-        fromUserName: user.name
+      // Broadcast to all room members except sender
+      room.members.forEach(memberId => {
+        const member = users.get(memberId);
+        if (member && member.socketId !== socket.id) {
+          io.to(member.socketId).emit('room:file:start', {
+            roomId,
+            fileId,
+            fileName: escapeHtml(fileName),
+            fileSize,
+            totalChunks,
+            fromUserId: userId,
+            fromUserName: user.name
+          });
+        }
       });
 
       console.log(`File transfer started: ${fileName} (${fileSize} bytes) by ${user.name} in room ${room.name}`);
@@ -468,12 +474,18 @@ io.on('connection', (socket) => {
         return;
       }
       
-      io.to(roomId).emit('room:file:chunk', {
-        roomId,
-        fileId,
-        chunkIndex,
-        chunk,
-        fromUserId: userId
+      // Broadcast to all room members except sender
+      room.members.forEach(memberId => {
+        const member = users.get(memberId);
+        if (member && member.socketId !== socket.id) {
+          io.to(member.socketId).emit('room:file:chunk', {
+            roomId,
+            fileId,
+            chunkIndex,
+            chunk,
+            fromUserId: userId
+          });
+        }
       });
     } catch (error) {
       socket.emit('error', { message: 'Failed to send file chunk' });
@@ -489,10 +501,16 @@ io.on('connection', (socket) => {
         return;
       }
       
-      io.to(roomId).emit('room:file:end', {
-        roomId,
-        fileId,
-        fromUserId: userId
+      // Broadcast to all room members except sender
+      room.members.forEach(memberId => {
+        const member = users.get(memberId);
+        if (member && member.socketId !== socket.id) {
+          io.to(member.socketId).emit('room:file:end', {
+            roomId,
+            fileId,
+            fromUserId: userId
+          });
+        }
       });
     } catch (error) {
       socket.emit('error', { message: 'Failed to complete file transfer' });

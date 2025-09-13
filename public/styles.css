@@ -48,6 +48,16 @@ body.light .section, body.light .section * { color: #111827; }
 body.light .tile-title { color: #111827 !important; }
 body.light .tile-info { color: #374151 !important; }
 body.light .file-sender { color: #6b7280; }
+body.light .download-btn { 
+    background: #3b82f6; 
+    color: white; 
+}
+body.light .download-btn:hover { 
+    background: #2563eb; 
+}
+body.light .download-btn:active { 
+    background: #1d4ed8; 
+}
 /* Peer/connection items */
 body.light .connection-list, body.light .connection-list * { color: #111827; }
 
@@ -1155,6 +1165,13 @@ body.light .section-header h3 { color: #111827; }
     cursor: pointer;
 }
 
+.message-sender {
+    font-size: 12px;
+    color: #007bff;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
 .message-time {
     font-size: 11px;
     opacity: 0.7;
@@ -1272,6 +1289,33 @@ body.light .section-header h3 { color: #111827; }
     color: #888;
     font-size: 11px;
     margin-top: 2px;
+}
+
+.download-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 0.8em;
+    cursor: pointer;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: background-color 0.2s;
+}
+
+.download-btn:hover {
+    background: #0056b3;
+}
+
+.download-btn:active {
+    background: #004085;
+}
+
+.download-icon {
+    font-size: 0.9em;
 }
 
 /* Chat Input Area */
@@ -1867,6 +1911,9 @@ body.light .message.sent {
     background: linear-gradient(135deg, #4da3ff, #1e73e6);
     color: #ffffff;
     box-shadow: 0 10px 22px rgba(29,78,216,0.18);
+}
+body.light .message-sender {
+    color: #3b82f6;
 }
 body.light .message-time {
     color: #6b7280;
