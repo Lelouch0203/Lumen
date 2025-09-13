@@ -1,253 +1,172 @@
-# Lumen Chat Web-Application
+# WiFi Chat - Multi-User P2P Chat Application
 
-## Name update
+A powerful peer-to-peer webchat application that works without internet, supporting many users with advanced features like WebRTC, file sharing, and offline support.
 
-A complete peer-to-peer webchat application that works over LAN and the internet using WebRTC and Socket.IO. Features real-time messaging, file transfers, public/private rooms, and direct peer connections with no database required.
+## 🚀 Features
 
-## Features
+### Core Functionality
+- **No Internet Required**: Works entirely on local WiFi networks
+- **Multi-User Support**: Up to 200 concurrent users, 50 users per room
+- **Real-time Messaging**: Instant message delivery using Socket.IO
+- **Room-based Chat**: Create public and private rooms with custom member limits
+- **Advanced File Sharing**: Send files up to 50MB with progress indicators
+- **WebRTC Support**: Direct peer-to-peer connections as backup
+- **Offline Support**: Service worker for offline functionality
+- **Local Network Discovery**: Find other WiFi Chat servers on your network
 
-- **Real-time P2P Communication**: Direct peer-to-peer messaging using WebRTC DataChannels
-- **Room System**: Create and join public or private rooms (with 4-digit PIN protection)
-- **File Transfers**: Chunked file transfer (512KB chunks) with progress tracking
-- **Fallback Support**: Automatic fallback to server relay if P2P connection fails
-- **Session Management**: 30-minute session persistence with localStorage
-- **Client-side Caching**: IndexedDB for chat history and file storage
-- **Responsive Design**: Mobile-friendly dark theme interface
-- **LAN Support**: Works across local network devices
-- **Security**: PIN hashing, XSS protection, and secure WebRTC connections
+### User Experience
+- **Modern UI**: Beautiful, responsive interface with light/dark themes
+- **Room Management**: Create, join, and manage rooms with member limits
+- **Direct Connections**: Establish direct peer-to-peer connections with other users
+- **Message Features**: Edit, delete, and react to messages
+- **File Management**: Download and manage shared files
+- **Performance Optimized**: Rate limiting and message throttling for smooth operation
 
-## Technology Stack
+### Technical Features
+- **Rate Limiting**: Prevents spam with message and file transfer limits
+- **Performance Optimization**: Virtual scrolling and message queuing
+- **Offline Queue**: Messages are queued when offline and sent when reconnected
+- **Cross-platform**: Works on any device with a modern web browser
+- **Progressive Web App**: Service worker for offline functionality
 
-- **Backend**: Node.js, Express, Socket.IO
-- **Frontend**: Vanilla JavaScript, HTML5, CSS3
-- **Real-time**: WebRTC DataChannels, Socket.IO
-- **Storage**: IndexedDB (client-side), In-memory (server-side)
-- **Security**: bcryptjs for PIN hashing, HTML escaping
+## 📦 Installation
 
-## Installation
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd Lumen
+   ```
 
-1. **Clone or download the project files**
-
-2. **Install dependencies**:
+2. **Install dependencies**
    ```bash
    npm install
    ```
 
-3. **Start the server**:
+3. **Start the server**
    ```bash
    npm start
    ```
-   
-   For development with auto-restart:
-   ```bash
-   npm run dev
-   ```
 
-4. **Access the application**:
-   - Local: http://localhost:3000
-   - LAN: http://[YOUR_LOCAL_IP]:3000
+4. **Access the application**
+   - Open your browser to `http://localhost:3000`
+   - The console will display your local IP address for other devices
 
-## Finding Your Local IP Address
+## 🎯 Usage
 
-To allow other devices on your network to connect:
+### Getting Started
+1. **Join the Network**: Enter your display name and optional avatar URL
+2. **Create Rooms**: Set up public or private rooms with custom member limits
+3. **Join Rooms**: Browse available rooms or join with a PIN for private rooms
+4. **Start Chatting**: Send messages, share files, and interact with other users
 
-### Windows:
-```bash
-ipconfig
-```
-Look for "IPv4 Address" under your active network adapter.
+### Advanced Features
+- **Direct Connections**: Click "🔗 Direct" next to any user to establish a WebRTC connection
+- **File Sharing**: Use the 📎 button to attach and send files
+- **Room Management**: Room creators can manage members and settings
+- **Offline Mode**: Continue using the app offline - messages will be sent when reconnected
 
-### macOS/Linux:
-```bash
-ifconfig
-```
-Look for "inet" address under your active network interface.
+### Network Discovery
+- Click the "🔍 Discover" button to scan for other WiFi Chat servers on your local network
+- Share your local IP address with others to let them join your server
 
-### Alternative (All platforms):
-```bash
-node -e "console.log(require('os').networkInterfaces())"
-```
+## 🛠 Technical Details
 
-## Usage Guide
+### Backend Architecture
+- **Node.js** with Express and Socket.IO
+- **Rate Limiting**: 10 messages/minute, 5 files/minute per user
+- **Room Management**: Configurable member limits and room creation limits
+- **WebRTC Signaling**: Server-assisted peer-to-peer connection setup
+- **Performance**: Optimized for up to 200 concurrent users
 
-### First Time Setup
+### Frontend Technology
+- **Vanilla JavaScript** with modern ES6+ features
+- **IndexedDB** for offline message and file storage
+- **Service Worker** for offline functionality
+- **WebRTC** with SimplePeer for direct connections
+- **Responsive CSS** with modern design patterns
 
-1. **Enter Display Name**: When you first visit the app, enter your display name
-2. **Session Persistence**: Your session will be saved for 30 minutes
-3. **Automatic Reconnection**: If you refresh within 30 minutes, you'll automatically rejoin
-
-### Navigation
-
-The app has four main tabs:
-
-- **Lobby**: Overview of your rooms and active connections
-- **Public Rooms**: Browse and join public chat rooms
-- **Private Rooms**: Create or join PIN-protected rooms
-- **Peers**: View all connected users and start direct chats
-
-### Creating Rooms
-
-#### Public Room:
-1. Go to "Public Rooms" tab
-2. Click "Create Room"
-3. Enter room name
-4. Click "Create"
-
-#### Private Room:
-1. Go to "Private Rooms" tab
-2. Click "Create Room"
-3. Enter room name and 4-digit PIN
-4. Click "Create"
-
-### Joining Rooms
-
-- **Public Rooms**: Click "Join" on any public room tile
-- **Private Rooms**: Enter the 4-digit PIN and click "Join with PIN"
-
-### Direct Peer Chat
-
-1. Go to "Peers" tab
-2. Use search bar to filter users
-3. Click "Chat" on any peer tile
-4. WebRTC connection will be established automatically
-
-### File Sharing
-
-1. Open any peer chat
-2. Click the attachment button (📎)
-3. Select files to send
-4. Files are sent via WebRTC (or server fallback)
-5. Recipients can download files automatically
-
-### Room Management
-
-- **Room Leaders**: The creator becomes the room lead
-- **Kick Users**: Room leads can kick other users
-- **Auto-cleanup**: Empty rooms are automatically deleted
-
-## Network Configuration
-
-### LAN Usage
-
-The server listens on `0.0.0.0:3000`, making it accessible from any device on your local network.
-
-**Example**: If your computer's IP is `192.168.1.100`, other devices can access:
-```
-http://192.168.1.100:3000
-```
-
-### Internet Usage
-
-For internet access, you'll need to:
-
-1. **Port Forward**: Forward port 3000 on your router to your computer
-2. **Public IP**: Share your public IP address with remote users
-3. **Firewall**: Ensure port 3000 is allowed through your firewall
-
-### WebRTC Configuration
-
-The app uses Google's STUN servers by default:
-- `stun:stun.l.google.com:19302`
-- `stun:stun1.l.google.com:19302`
-
-For better connectivity across different networks, you can add TURN servers by modifying the `rtcConfig` in `public/app.js`.
-
-## File Structure
-
-```
-P2P chat - ws/
-├── package.json          # Dependencies and scripts
-├── server.js            # Node.js server with Socket.IO
-├── README.md           # This file
-└── public/
-    ├── index.html      # Main HTML structure
-    ├── styles.css      # Responsive CSS styling
-    └── app.js          # Client-side JavaScript
-```
-
-## Technical Details
-
-### Data Flow
-
-1. **User Connection**: Socket.IO handles initial connection and user registration
-2. **Room Management**: Server maintains room state in memory
-3. **P2P Signaling**: WebRTC signaling via Socket.IO
-4. **Direct Communication**: Messages and files sent via WebRTC DataChannels
-5. **Fallback**: Server relay when P2P fails
-
-### File Transfer Process
-
-1. **Chunking**: Files split into 512KB chunks
-2. **Sequential Transfer**: Chunks sent with progress tracking
-3. **Reassembly**: Receiver rebuilds file from chunks
-4. **Storage**: Temporary storage in IndexedDB
-5. **Download**: Automatic download trigger
+### File Transfer
+- **Chunked Transfer**: Large files are split into 512KB chunks
+- **Progress Tracking**: Real-time upload/download progress
+- **Size Limits**: Maximum 50MB per file, 1000 chunks maximum
+- **Type Support**: All file types supported
 
 ### Security Features
+- **Input Sanitization**: All user input is properly escaped
+- **Rate Limiting**: Prevents abuse and spam
+- **Room Privacy**: PIN-protected private rooms
+- **User Validation**: Proper user authentication and session management
 
-- **PIN Protection**: Private room PINs hashed with bcryptjs
-- **XSS Prevention**: All user input escaped
-- **Session Security**: 30-minute expiry with secure storage
-- **WebRTC Security**: Secure peer connections with STUN/TURN
+## 🌐 Network Setup
 
-## Troubleshooting
+### Local Network Access
+1. Start the server on your computer
+2. Note the local IP address displayed in the console
+3. Other devices on the same WiFi network can access: `http://YOUR_IP:3000`
+4. No internet connection required - works entirely on local network
 
-### Connection Issues
+### Port Configuration
+- Default port: 3000
+- Change with: `PORT=8080 npm start`
+- Ensure firewall allows the port for network access
 
-- **Can't connect to server**: Check if port 3000 is available
-- **LAN access fails**: Verify firewall settings and local IP
-- **WebRTC fails**: Check if STUN servers are accessible
+## 📱 Browser Compatibility
 
-### File Transfer Issues
+- **Chrome/Edge**: Full support including WebRTC
+- **Firefox**: Full support including WebRTC
+- **Safari**: Full support including WebRTC
+- **Mobile Browsers**: Responsive design works on all mobile devices
 
-- **Large files fail**: Increase chunk size or add delays
-- **Transfer stuck**: Check WebRTC connection status
-- **Fallback not working**: Verify Socket.IO connection
+## 🔧 Configuration
 
-### Performance Tips
+### Server Limits (configurable in server.js)
+```javascript
+const MAX_ROOM_MEMBERS = 50;        // Users per room
+const MAX_ROOMS_PER_USER = 10;      // Rooms per user
+const MAX_TOTAL_USERS = 200;        // Total server users
+const MESSAGE_RATE_LIMIT = 10;      // Messages per minute
+const FILE_RATE_LIMIT = 5;          // Files per minute
+```
 
-- **Large rooms**: Limit concurrent connections for better performance
-- **File sizes**: Recommend files under 100MB for best experience
-- **Network quality**: Better networks = faster P2P connections
+### Client Settings
+- Message throttling: 100ms between messages
+- Max visible messages: 100 (older messages are removed for performance)
+- File chunk size: 512KB
+- Offline message queue: Unlimited (stored in localStorage)
 
-## Browser Compatibility
+## 🚀 Performance Features
 
-- **Chrome**: Full support (recommended)
-- **Firefox**: Full support
-- **Safari**: WebRTC support varies by version
-- **Edge**: Full support on Chromium-based versions
+### Server Optimizations
+- **Connection Pooling**: Efficient WebSocket management
+- **Rate Limiting**: Prevents server overload
+- **Memory Management**: Automatic cleanup of disconnected users
+- **Error Handling**: Comprehensive error handling and logging
 
-## Development
+### Client Optimizations
+- **Message Queuing**: Smooth message sending with throttling
+- **Virtual Scrolling**: Efficient rendering of large message lists
+- **Lazy Loading**: On-demand loading of chat history
+- **Caching**: Service worker caching for offline functionality
 
-### Adding Features
+## 🔒 Privacy & Security
 
-The modular structure makes it easy to add features:
+- **Local Network Only**: No data leaves your local network
+- **No External Services**: No third-party tracking or analytics
+- **Encrypted Connections**: WebRTC provides end-to-end encryption for direct connections
+- **User Control**: Users control their own data and connections
 
-- **Server**: Modify `server.js` for new Socket.IO events
-- **Client**: Extend the `P2PWebChat` class in `app.js`
-- **UI**: Add components to `index.html` and style in `styles.css`
+## 📄 License
 
-### Configuration Options
+MIT License - Feel free to use, modify, and distribute.
 
-Key configuration points:
+## 🤝 Contributing
 
-- **Port**: Change `PORT` environment variable or modify server.js
-- **Session Duration**: Modify expiry time in `app.js`
-- **Chunk Size**: Adjust `chunkSize` in file transfer code
-- **STUN/TURN**: Update `rtcConfig` for different servers
+Contributions are welcome! Please feel free to submit issues and pull requests.
 
-## License
+## 📞 Support
 
-MIT License - Feel free to use and modify as needed.
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section
-2. Verify your network configuration
-3. Test with multiple devices on the same network
-4. Check browser console for error messages
+For issues or questions, please check the console logs for detailed error information and ensure all devices are on the same local network.
 
 ---
 
-**Enjoy your P2P WebChat experience!** 🚀
+**Enjoy your enhanced WiFi Chat experience!** 🚀

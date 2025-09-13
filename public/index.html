@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WiFi Chat</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -28,6 +29,7 @@
         <header class="app-header">
             <h1 class="brand">WiFi Chat</h1>
             <div class="user-info">
+                <button id="discoverServersBtn" class="btn-secondary" title="Discover local servers">🔍 Discover</button>
                 <button id="themeToggleBtn" class="btn-secondary">Toggle Theme</button>
                 <span id="currentUserName"></span>
                 <span id="currentUserAvatar" class="avatar"></span>
@@ -144,6 +146,7 @@
         <div class="modal-content">
             <h3 id="roomModalTitle">Create Room</h3>
             <input type="text" id="roomNameInput" placeholder="Room name" maxlength="50">
+            <input type="number" id="maxMembersInput" placeholder="Max members (2-50)" min="2" max="50" value="50">
             <div id="pinSection" class="hidden">
                 <input type="text" id="roomPinInput" placeholder="4-digit PIN" maxlength="4" pattern="[0-9]{4}">
             </div>
@@ -171,8 +174,10 @@
     <div id="notifications" class="notifications"></div>
 
     <!-- Scripts -->
-    <!-- Socket.IO client via CDN (no integrity to avoid SRI mismatch issues) -->
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- Socket.IO client (local copy for offline use) -->
+    <script src="socket.io.min.js"></script>
+    <!-- Simple Peer for WebRTC (local copy for offline use) -->
+    <script src="simplepeer.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

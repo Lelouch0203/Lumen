@@ -7,6 +7,14 @@ class WiFiChat {
         this.currentChat = null;
         this.notificationSoundEnabled = true;
         this.fileTransfers = new Map();
+        this.peerConnections = new Map(); // WebRTC peer connections
+        this.isWebRTCSupported = typeof SimplePeer !== 'undefined';
+        
+        // Performance optimizations
+        this.messageQueue = [];
+        this.isProcessingQueue = false;
+        this.lastMessageTime = 0;
+        this.messageThrottleDelay = 100; // 100ms between messages
 
         this.init();
     }
@@ -51,6 +59,8 @@ class WiFiChat {
 
     init() {
         this.initializeIndexedDB();
+        this.registerServiceWorker();
+        this.setupOfflineDetection();
         this.checkSession();
         this.setupEventListeners();
         this.requestNotificationPermission();
@@ -131,6 +141,11 @@ class WiFiChat {
 
     // Socket.IO Connection
     connectToServer() {
+        if (typeof io === 'undefined') {
+            this.showNotification('Socket.IO library not loaded. Please refresh the page.', 'error');
+            return;
+        }
+        
         this.socket = io();
         
         this.socket.on('connect', () => {
@@ -140,6 +155,8 @@ class WiFiChat {
                 userId: this.currentUser.userId,
                 avatarUrl: this.currentUser.avatarUrl
             });
+            // Process any offline messages
+            this.processOfflineMessages();
         });
 
         this.socket.on('disconnect', () => {
@@ -149,6 +166,11 @@ class WiFiChat {
         this.socket.on('user:joined', (data) => {
             this.currentUser.userId = data.userId;
             this.saveSession(this.currentUser);
+            
+            // Display server stats if available
+            if (data.serverStats) {
+                this.showNotification(`Connected! ${data.serverStats.totalUsers}/${data.serverStats.maxUsers} users online`, 'success');
+            }
         });
 
         this.socket.on('user:list', (users) => {
@@ -261,6 +283,19 @@ class WiFiChat {
         this.socket.on('room:file:end', (data) => {
             this.handleRoomFileTransferEnd(data);
         });
+
+        // WebRTC signaling handlers
+        this.socket.on('webrtc:offer', (data) => {
+            this.handleWebRTCOffer(data);
+        });
+
+        this.socket.on('webrtc:answer', (data) => {
+            this.handleWebRTCAnswer(data);
+        });
+
+        this.socket.on('webrtc:ice-candidate', (data) => {
+            this.handleWebRTCIceCandidate(data);
+        });
     }
 
     updateConnectionStatus(connected) {
@@ -369,6 +404,14 @@ class WiFiChat {
         }
 
 
+        // Discover servers button
+        const discoverBtn = document.getElementById('discoverServersBtn');
+        if (discoverBtn) {
+            discoverBtn.addEventListener('click', () => {
+                this.discoverLocalServers();
+            });
+        }
+
         // Theme toggle button
         const themeBtn = document.getElementById('themeToggleBtn');
         if (themeBtn) {
@@ -443,6 +486,7 @@ class WiFiChat {
         const name = document.getElementById('roomNameInput').value.trim();
         const isPrivate = !document.getElementById('pinSection').classList.contains('hidden');
         const pin = document.getElementById('roomPinInput').value;
+        const maxMembers = document.getElementById('maxMembersInput')?.value || 50;
 
         if (!name) {
             this.showNotification('Please enter a room name', 'error');
@@ -454,17 +498,36 @@ class WiFiChat {
             return;
         }
 
-        this.socket.emit('room:create', { name, isPrivate, pin });
+        const maxMembersNum = parseInt(maxMembers);
+        if (isNaN(maxMembersNum) || maxMembersNum < 2 || maxMembersNum > 50) {
+            this.showNotification('Max members must be between 2 and 50', 'error');
+            return;
+        }
+
+        if (this.socket && this.socket.connected) {
+            this.socket.emit('room:create', { name, isPrivate, pin, maxMembers: maxMembersNum });
+        } else {
+            this.showNotification('Not connected to server. Please wait and try again.', 'error');
+            return;
+        }
         // UX: show creating feedback
         this.showNotification(isPrivate ? 'Creating private room…' : 'Creating public room…', 'info');
     }
 
     joinRoom(roomId, pin = null) {
-        this.socket.emit('room:join', { roomId, pin });
+        if (this.socket && this.socket.connected) {
+            this.socket.emit('room:join', { roomId, pin });
+        } else {
+            this.showNotification('Not connected to server. Please wait and try again.', 'error');
+        }
     }
 
     joinRoomWithPin(pin) {
-        this.socket.emit('room:joinByPin', { pin });
+        if (this.socket && this.socket.connected) {
+            this.socket.emit('room:joinByPin', { pin });
+        } else {
+            this.showNotification('Not connected to server. Please wait and try again.', 'error');
+        }
     }
 
     // Room List Updates
@@ -508,11 +571,16 @@ class WiFiChat {
                 <span class="tile-title">${this.escapeHtml(room.name)}</span>
                 <span class="tile-badge ${room.isPrivate ? 'private' : ''}">${room.isPrivate ? 'Private' : 'Public'}</span>
             </div>
-            <div class="tile-info">${room.members.length} member(s) ${isMember ? '• Joined' : ''}</div>
+            <div class="tile-info">
+                ${room.memberCount || room.members.length}/${room.maxMembers || 50} members 
+                ${isMember ? '• Joined' : ''}
+                ${room.memberCount >= (room.maxMembers || 50) ? '• Full' : ''}
+            </div>
             <div class="tile-actions">
-                ${!isMember ? `<button class="tile-btn" onclick="app.joinRoom('${room.id}')">Join</button>` : ''}
+                ${!isMember && room.memberCount < (room.maxMembers || 50) ? `<button class="tile-btn" onclick="app.joinRoom('${room.id}')">Join</button>` : ''}
                 ${isMember ? `<button class="tile-btn" onclick="app.startRoomChat('${room.id}')">Open Chat</button>` : ''}
                 ${isLead && isMember ? `<button class="tile-btn danger" onclick="app.leaveRoom('${room.id}')">Leave</button>` : ''}
+                ${!isMember && room.memberCount >= (room.maxMembers || 50) ? `<button class="tile-btn" disabled>Room Full</button>` : ''}
             </div>
         `;
         return tile;
@@ -826,13 +894,14 @@ class WiFiChat {
         this.currentChat = { type: 'room', id: roomId };
         const room = this.rooms.get(roomId);
         
-        document.getElementById('chatTitle').textContent = `Room: ${room.name}`;
+        document.getElementById('chatTitle').textContent = `Room: ${room.name} (${room.memberCount || room.members.length} members)`;
         document.getElementById('chatPanel').classList.remove('hidden');
         
         // Clear unread count when opening chat
         this.clearUnreadCount('room', roomId);
         
         this.loadChatHistory(roomId);
+        this.displayRoomMembers(room);
         
         // Add to recent activity
         this.addRecentActivity('join', `Opened room ${room.name}`);
@@ -848,11 +917,73 @@ class WiFiChat {
         document.getElementById('messageInput').value = '';
     }
 
+    displayRoomMembers(room) {
+        // Add a members section to the chat panel
+        let membersSection = document.getElementById('roomMembers');
+        if (!membersSection) {
+            membersSection = document.createElement('div');
+            membersSection.id = 'roomMembers';
+            membersSection.className = 'room-members';
+            membersSection.innerHTML = '<h4>Room Members</h4><div class="members-list"></div>';
+            
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.parentNode.insertBefore(membersSection, chatMessages);
+        }
+
+        const membersList = membersSection.querySelector('.members-list');
+        membersList.innerHTML = '';
+
+        room.members.forEach(member => {
+            const memberDiv = document.createElement('div');
+            memberDiv.className = 'member-item';
+            
+            const isCurrentUser = member.id === this.currentUser.userId;
+            const hasDirectConnection = this.peerConnections.has(member.id);
+            
+            memberDiv.innerHTML = `
+                <div class="member-info">
+                    <div class="member-avatar">${member.name.charAt(0).toUpperCase()}</div>
+                    <div class="member-details">
+                        <div class="member-name">${this.escapeHtml(member.name)} ${isCurrentUser ? '(You)' : ''}</div>
+                        <div class="member-status">${hasDirectConnection ? 'Direct Connected' : 'Connected'}</div>
+                    </div>
+                </div>
+                <div class="member-actions">
+                    ${!isCurrentUser ? `
+                        <button class="member-btn" onclick="app.initiateDirectConnection('${member.id}', '${room.id}')" 
+                                title="Start direct connection">
+                            🔗 Direct
+                        </button>
+                        ${hasDirectConnection ? `
+                            <button class="member-btn danger" onclick="app.closeDirectConnection('${member.id}')" 
+                                    title="Close direct connection">
+                                ❌ Close
+                            </button>
+                        ` : ''}
+                    ` : ''}
+                </div>
+            `;
+            
+            membersList.appendChild(memberDiv);
+        });
+    }
+
     sendMessage() {
         const input = document.getElementById('messageInput');
         const text = input.value.trim();
         
         if (!text || !this.currentChat) return;
+        
+        // Throttle message sending
+        const now = Date.now();
+        if (now - this.lastMessageTime < this.messageThrottleDelay) {
+            // Queue message if sending too fast
+            this.messageQueue.push({ text, input });
+            this.processMessageQueue();
+            return;
+        }
+        
+        this.lastMessageTime = now;
         
         const message = {
             id: this.generateId(),
@@ -880,8 +1011,42 @@ class WiFiChat {
         this.autoResizeTextarea(input);
     }
 
+    processMessageQueue() {
+        if (this.isProcessingQueue || this.messageQueue.length === 0) return;
+        
+        this.isProcessingQueue = true;
+        
+        const processNext = () => {
+            if (this.messageQueue.length === 0) {
+                this.isProcessingQueue = false;
+                return;
+            }
+            
+            const { text, input } = this.messageQueue.shift();
+            input.value = text;
+            this.sendMessage();
+            
+            // Process next message after delay
+            setTimeout(processNext, this.messageThrottleDelay);
+        };
+        
+        processNext();
+    }
+
     displayMessage(message, isSent) {
         const container = document.getElementById('chatMessages');
+        
+        // Performance optimization: limit visible messages
+        const maxVisibleMessages = 100;
+        const messages = container.querySelectorAll('.msg-row');
+        if (messages.length > maxVisibleMessages) {
+            // Remove oldest messages (keep last 50)
+            const toRemove = messages.length - 50;
+            for (let i = 0; i < toRemove; i++) {
+                messages[i].remove();
+            }
+        }
+        
         const row = document.createElement('div');
         row.className = `msg-row ${isSent ? 'sent' : 'received'}`;
 
@@ -929,7 +1094,12 @@ class WiFiChat {
         }
 
         container.appendChild(row);
-        container.scrollTop = container.scrollHeight;
+        
+        // Smooth scroll to bottom
+        container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+        });
     }
 
 
@@ -1440,6 +1610,246 @@ class WiFiChat {
             if (!ok) return;
             new Notification(title, { body });
         } catch {}
+    }
+
+    // WebRTC Methods
+    async initiateDirectConnection(targetUserId, roomId = null) {
+        if (!this.isWebRTCSupported || typeof SimplePeer === 'undefined') {
+            this.showNotification('WebRTC not supported in this browser', 'error');
+            return;
+        }
+
+        try {
+            const peer = new SimplePeer({
+                initiator: true,
+                trickle: false
+            });
+
+            this.peerConnections.set(targetUserId, peer);
+
+            peer.on('signal', (data) => {
+                this.socket.emit('webrtc:offer', {
+                    targetUserId: targetUserId,
+                    offer: data,
+                    roomId: roomId
+                });
+            });
+
+            peer.on('connect', () => {
+                this.showNotification(`Direct connection established with user`, 'success');
+                console.log('WebRTC connection established');
+            });
+
+            peer.on('data', (data) => {
+                this.handleDirectMessage(data, targetUserId);
+            });
+
+            peer.on('error', (err) => {
+                console.error('WebRTC error:', err);
+                this.showNotification('Direct connection failed', 'error');
+                this.peerConnections.delete(targetUserId);
+            });
+
+        } catch (error) {
+            console.error('Failed to initiate direct connection:', error);
+            this.showNotification('Failed to start direct connection', 'error');
+        }
+    }
+
+    async handleWebRTCOffer(data) {
+        if (!this.isWebRTCSupported) return;
+
+        try {
+            const { fromUserId, offer, roomId } = data;
+            
+            const peer = new SimplePeer({
+                initiator: false,
+                trickle: false
+            });
+
+            this.peerConnections.set(fromUserId, peer);
+
+            peer.on('signal', (answer) => {
+                this.socket.emit('webrtc:answer', {
+                    targetUserId: fromUserId,
+                    answer: answer,
+                    roomId: roomId
+                });
+            });
+
+            peer.on('connect', () => {
+                this.showNotification(`Direct connection established with user`, 'success');
+                console.log('WebRTC connection established');
+            });
+
+            peer.on('data', (data) => {
+                this.handleDirectMessage(data, fromUserId);
+            });
+
+            peer.on('error', (err) => {
+                console.error('WebRTC error:', err);
+                this.showNotification('Direct connection failed', 'error');
+                this.peerConnections.delete(fromUserId);
+            });
+
+            peer.signal(offer);
+
+        } catch (error) {
+            console.error('Failed to handle WebRTC offer:', error);
+        }
+    }
+
+    async handleWebRTCAnswer(data) {
+        const { fromUserId, answer } = data;
+        const peer = this.peerConnections.get(fromUserId);
+        
+        if (peer) {
+            peer.signal(answer);
+        }
+    }
+
+    async handleWebRTCIceCandidate(data) {
+        const { fromUserId, candidate } = data;
+        const peer = this.peerConnections.get(fromUserId);
+        
+        if (peer) {
+            peer.signal(candidate);
+        }
+    }
+
+    handleDirectMessage(data, fromUserId) {
+        try {
+            const message = JSON.parse(data.toString());
+            console.log('Direct message received:', message);
+            
+            // Handle different types of direct messages
+            if (message.type === 'text') {
+                this.showNotification(`Direct message from user: ${message.text}`, 'info');
+            } else if (message.type === 'file') {
+                this.showNotification(`Direct file transfer from user: ${message.fileName}`, 'info');
+            }
+        } catch (error) {
+            console.error('Failed to parse direct message:', error);
+        }
+    }
+
+    sendDirectMessage(targetUserId, message) {
+        const peer = this.peerConnections.get(targetUserId);
+        if (peer && peer.connected) {
+            const data = JSON.stringify({
+                type: 'text',
+                text: message,
+                fromUserId: this.currentUser.userId,
+                timestamp: new Date().toISOString()
+            });
+            peer.send(data);
+            return true;
+        }
+        return false;
+    }
+
+    sendDirectFile(targetUserId, file) {
+        const peer = this.peerConnections.get(targetUserId);
+        if (peer && peer.connected) {
+            const data = JSON.stringify({
+                type: 'file',
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type,
+                fromUserId: this.currentUser.userId,
+                timestamp: new Date().toISOString()
+            });
+            peer.send(data);
+            return true;
+        }
+        return false;
+    }
+
+    closeDirectConnection(targetUserId) {
+        const peer = this.peerConnections.get(targetUserId);
+        if (peer) {
+            peer.destroy();
+            this.peerConnections.delete(targetUserId);
+        }
+    }
+
+    // Offline Support Methods
+    async registerServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.register('/sw.js');
+                console.log('Service Worker registered successfully:', registration);
+            } catch (error) {
+                console.log('Service Worker registration failed:', error);
+            }
+        }
+    }
+
+    setupOfflineDetection() {
+        // Listen for online/offline events
+        window.addEventListener('online', () => {
+            this.showNotification('Connection restored!', 'success');
+            this.updateConnectionStatus(true);
+            this.attemptReconnection();
+        });
+
+        window.addEventListener('offline', () => {
+            this.showNotification('Connection lost. Working offline...', 'warning');
+            this.updateConnectionStatus(false);
+        });
+
+        // Initial connection status
+        this.updateConnectionStatus(navigator.onLine);
+    }
+
+    attemptReconnection() {
+        if (this.socket && this.socket.disconnected) {
+            this.socket.connect();
+        }
+    }
+
+    // Local Network Discovery
+    async discoverLocalServers() {
+        // This would scan for other WiFi Chat servers on the local network
+        // For now, we'll show a placeholder
+        this.showNotification('Local network discovery not yet implemented', 'info');
+    }
+
+    // Offline Message Queue
+    queueOfflineMessage(message) {
+        const offlineMessages = JSON.parse(localStorage.getItem('offlineMessages') || '[]');
+        offlineMessages.push({
+            ...message,
+            timestamp: new Date().toISOString(),
+            queued: true
+        });
+        localStorage.setItem('offlineMessages', JSON.stringify(offlineMessages));
+    }
+
+    async processOfflineMessages() {
+        const offlineMessages = JSON.parse(localStorage.getItem('offlineMessages') || '[]');
+        if (offlineMessages.length > 0 && this.socket && this.socket.connected) {
+            this.showNotification(`Sending ${offlineMessages.length} offline messages...`, 'info');
+            
+            for (const message of offlineMessages) {
+                try {
+                    if (message.type === 'room') {
+                        this.socket.emit('room:message', {
+                            roomId: message.roomId,
+                            message: message
+                        });
+                    }
+                    // Add small delay to prevent overwhelming the server
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                } catch (error) {
+                    console.error('Failed to send offline message:', error);
+                }
+            }
+            
+            // Clear processed messages
+            localStorage.removeItem('offlineMessages');
+            this.showNotification('Offline messages sent successfully!', 'success');
+        }
     }
 }
 

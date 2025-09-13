@@ -12,13 +12,31 @@ const io = socketIo(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  // Performance optimizations for many users
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  maxHttpBufferSize: 1e6, // 1MB
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 
 // In-memory data structures
-const users = new Map(); // userId -> { id, name, socketId, joinedAt }
-const rooms = new Map(); // roomId -> { id, name, isPrivate, pinHash, leadUserId, members: Set }
+const users = new Map(); // userId -> { id, name, socketId, joinedAt, lastSeen }
+const rooms = new Map(); // roomId -> { id, name, isPrivate, pinHash, leadUserId, members: Set, maxMembers, createdAt }
 const socketToUser = new Map(); // socketId -> userId
+const userSessions = new Map(); // socketId -> { userId, connectedAt, lastActivity }
+
+// Configuration
+const MAX_ROOM_MEMBERS = 50; // Maximum users per room
+const MAX_ROOMS_PER_USER = 10; // Maximum rooms a user can create
+const MAX_TOTAL_USERS = 200; // Maximum total users on server
+const MESSAGE_RATE_LIMIT = 10; // Messages per minute per user
+const FILE_RATE_LIMIT = 5; // Files per minute per user
+
+// Rate limiting
+const userMessageCounts = new Map(); // userId -> { count, resetTime }
+const userFileCounts = new Map(); // userId -> { count, resetTime }
 
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -35,6 +53,12 @@ io.on('connection', (socket) => {
   // User joins the network
   socket.on('user:join', ({ name, userId, avatarUrl }) => {
     try {
+      // Check server capacity
+      if (users.size >= MAX_TOTAL_USERS) {
+        socket.emit('error', { message: 'Server is at capacity. Please try again later.' });
+        return;
+      }
+
       // Generate new userId if not provided or if user doesn't exist
       let finalUserId = userId;
       if (!userId || !users.has(userId)) {
@@ -47,18 +71,33 @@ io.on('connection', (socket) => {
         name: escapeHtml(name),
         avatarUrl: avatarUrl ? String(avatarUrl) : undefined,
         socketId: socket.id,
-        joinedAt: new Date()
+        joinedAt: new Date(),
+        lastSeen: new Date()
       };
 
       users.set(finalUserId, user);
       socketToUser.set(socket.id, finalUserId);
+      userSessions.set(socket.id, {
+        userId: finalUserId,
+        connectedAt: new Date(),
+        lastActivity: new Date()
+      });
 
       // Send user their ID and updated peer list
-      socket.emit('user:joined', { userId: finalUserId, user });
+      socket.emit('user:joined', { 
+        userId: finalUserId, 
+        user,
+        serverStats: {
+          totalUsers: users.size,
+          totalRooms: rooms.size,
+          maxUsers: MAX_TOTAL_USERS
+        }
+      });
       broadcastUserList();
 
-      console.log(`User joined: ${name} (${finalUserId})`);
+      console.log(`User joined: ${name} (${finalUserId}) - Total users: ${users.size}`);
     } catch (error) {
+      console.error('User join error:', error);
       socket.emit('error', { message: 'Failed to join network' });
     }
   });
@@ -84,11 +123,18 @@ io.on('connection', (socket) => {
   });
 
   // Room creation
-  socket.on('room:create', async ({ name, isPrivate, pin }) => {
+  socket.on('room:create', async ({ name, isPrivate, pin, maxMembers }) => {
     try {
       const userId = socketToUser.get(socket.id);
       if (!userId || !users.has(userId)) {
         socket.emit('error', { message: 'User not found' });
+        return;
+      }
+
+      // Check if user has reached room creation limit
+      const userRooms = Array.from(rooms.values()).filter(room => room.leadUserId === userId);
+      if (userRooms.length >= MAX_ROOMS_PER_USER) {
+        socket.emit('error', { message: `You can only create up to ${MAX_ROOMS_PER_USER} rooms` });
         return;
       }
 
@@ -105,7 +151,9 @@ io.on('connection', (socket) => {
         isPrivate: !!isPrivate,
         pinHash,
         leadUserId: userId,
-        members: new Set([userId])
+        members: new Set([userId]),
+        maxMembers: Math.min(maxMembers || MAX_ROOM_MEMBERS, MAX_ROOM_MEMBERS),
+        createdAt: new Date()
       };
 
       rooms.set(roomId, room);
@@ -114,8 +162,9 @@ io.on('connection', (socket) => {
       socket.emit('room:created', { roomId, room: serializeRoom(room) });
       broadcastRoomList();
 
-      console.log(`Room created: ${name} by ${users.get(userId).name}`);
+      console.log(`Room created: ${name} by ${users.get(userId).name} (${room.members.size}/${room.maxMembers} members)`);
     } catch (error) {
+      console.error('Room creation error:', error);
       socket.emit('error', { message: 'Failed to create room' });
     }
   });
@@ -135,6 +184,18 @@ io.on('connection', (socket) => {
         return;
       }
 
+      // Check if room is full
+      if (room.members.size >= room.maxMembers) {
+        socket.emit('error', { message: 'Room is full' });
+        return;
+      }
+
+      // Check if user is already in the room
+      if (room.members.has(userId)) {
+        socket.emit('error', { message: 'You are already in this room' });
+        return;
+      }
+
       // Check PIN for private rooms
       if (room.isPrivate && room.pinHash) {
         if (!pin || !(await bcrypt.compare(pin, room.pinHash))) {
@@ -147,11 +208,18 @@ io.on('connection', (socket) => {
       room.members.add(userId);
       socket.join(roomId);
 
+      // Update user's last activity
+      const user = users.get(userId);
+      if (user) {
+        user.lastSeen = new Date();
+      }
+
       socket.emit('room:joined', { roomId, room: serializeRoom(room) });
       socket.to(roomId).emit('room:update', { roomId, room: serializeRoom(room) });
 
-      console.log(`User ${users.get(userId).name} joined room ${room.name}`);
+      console.log(`User ${users.get(userId).name} joined room ${room.name} (${room.members.size}/${room.maxMembers} members)`);
     } catch (error) {
+      console.error('Room join error:', error);
       socket.emit('error', { message: 'Failed to join room' });
     }
   });
@@ -262,6 +330,18 @@ io.on('connection', (socket) => {
         return;
       }
 
+      // Check rate limit
+      if (!checkRateLimit(userId, 'message')) {
+        socket.emit('error', { message: 'Message rate limit exceeded. Please slow down.' });
+        return;
+      }
+
+      // Update user activity
+      const user = users.get(userId);
+      if (user) {
+        user.lastSeen = new Date();
+      }
+
       // Broadcast message to all room members
       room.members.forEach(memberId => {
         const member = users.get(memberId);
@@ -270,6 +350,7 @@ io.on('connection', (socket) => {
         }
       });
     } catch (error) {
+      console.error('Room message error:', error);
       socket.emit('error', { message: 'Failed to send room message' });
     }
   });
@@ -340,6 +421,25 @@ io.on('connection', (socket) => {
         socket.emit('error', { message: 'Not authorized to send files in this room' });
         return;
       }
+
+      // Check rate limit for file transfers
+      if (!checkRateLimit(userId, 'file')) {
+        socket.emit('error', { message: 'File transfer rate limit exceeded. Please wait before sending another file.' });
+        return;
+      }
+
+      // Check file size limit (50MB)
+      const MAX_FILE_SIZE = 50 * 1024 * 1024;
+      if (fileSize > MAX_FILE_SIZE) {
+        socket.emit('error', { message: 'File size too large. Maximum 50MB allowed.' });
+        return;
+      }
+
+      // Check chunk limit
+      if (totalChunks > 1000) {
+        socket.emit('error', { message: 'Too many chunks. Please try a smaller file.' });
+        return;
+      }
       
       const user = users.get(userId);
       io.to(roomId).emit('room:file:start', {
@@ -351,7 +451,10 @@ io.on('connection', (socket) => {
         fromUserId: userId,
         fromUserName: user.name
       });
+
+      console.log(`File transfer started: ${fileName} (${fileSize} bytes) by ${user.name} in room ${room.name}`);
     } catch (error) {
+      console.error('File transfer start error:', error);
       socket.emit('error', { message: 'Failed to start file transfer' });
     }
   });
@@ -393,6 +496,79 @@ io.on('connection', (socket) => {
       });
     } catch (error) {
       socket.emit('error', { message: 'Failed to complete file transfer' });
+    }
+  });
+
+  // WebRTC signaling for direct peer-to-peer connections
+  socket.on('webrtc:offer', ({ targetUserId, offer, roomId }) => {
+    try {
+      const userId = socketToUser.get(socket.id);
+      const targetUser = users.get(targetUserId);
+      
+      if (!targetUser) {
+        socket.emit('error', { message: 'Target user not found' });
+        return;
+      }
+
+      // Check if both users are in the same room
+      if (roomId) {
+        const room = rooms.get(roomId);
+        if (!room || !room.members.has(userId) || !room.members.has(targetUserId)) {
+          socket.emit('error', { message: 'Both users must be in the same room for direct connection' });
+          return;
+        }
+      }
+
+      io.to(targetUser.socketId).emit('webrtc:offer', {
+        fromUserId: userId,
+        offer: offer,
+        roomId: roomId
+      });
+    } catch (error) {
+      console.error('WebRTC offer error:', error);
+      socket.emit('error', { message: 'Failed to send WebRTC offer' });
+    }
+  });
+
+  socket.on('webrtc:answer', ({ targetUserId, answer, roomId }) => {
+    try {
+      const userId = socketToUser.get(socket.id);
+      const targetUser = users.get(targetUserId);
+      
+      if (!targetUser) {
+        socket.emit('error', { message: 'Target user not found' });
+        return;
+      }
+
+      io.to(targetUser.socketId).emit('webrtc:answer', {
+        fromUserId: userId,
+        answer: answer,
+        roomId: roomId
+      });
+    } catch (error) {
+      console.error('WebRTC answer error:', error);
+      socket.emit('error', { message: 'Failed to send WebRTC answer' });
+    }
+  });
+
+  socket.on('webrtc:ice-candidate', ({ targetUserId, candidate, roomId }) => {
+    try {
+      const userId = socketToUser.get(socket.id);
+      const targetUser = users.get(targetUserId);
+      
+      if (!targetUser) {
+        socket.emit('error', { message: 'Target user not found' });
+        return;
+      }
+
+      io.to(targetUser.socketId).emit('webrtc:ice-candidate', {
+        fromUserId: userId,
+        candidate: candidate,
+        roomId: roomId
+      });
+    } catch (error) {
+      console.error('WebRTC ICE candidate error:', error);
+      socket.emit('error', { message: 'Failed to send ICE candidate' });
     }
   });
 
@@ -439,15 +615,47 @@ function escapeHtml(text) {
   return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
+function checkRateLimit(userId, type) {
+  const now = Date.now();
+  const limit = type === 'message' ? MESSAGE_RATE_LIMIT : FILE_RATE_LIMIT;
+  const counts = type === 'message' ? userMessageCounts : userFileCounts;
+  
+  const userCount = counts.get(userId);
+  
+  if (!userCount || now > userCount.resetTime) {
+    // Reset or initialize counter
+    counts.set(userId, {
+      count: 1,
+      resetTime: now + 60000 // Reset in 1 minute
+    });
+    return true;
+  }
+  
+  if (userCount.count >= limit) {
+    return false; // Rate limit exceeded
+  }
+  
+  userCount.count++;
+  return true;
+}
+
 function serializeRoom(room) {
   return {
     id: room.id,
     name: room.name,
     isPrivate: room.isPrivate,
     leadUserId: room.leadUserId,
+    maxMembers: room.maxMembers,
+    memberCount: room.members.size,
+    createdAt: room.createdAt,
     members: Array.from(room.members).map(userId => {
       const user = users.get(userId);
-      return user ? { id: user.id, name: user.name } : null;
+      return user ? { 
+        id: user.id, 
+        name: user.name, 
+        avatarUrl: user.avatarUrl,
+        lastSeen: user.lastSeen 
+      } : null;
     }).filter(Boolean)
   };
 }
@@ -457,7 +665,8 @@ function broadcastUserList() {
     id: user.id,
     name: user.name,
     avatarUrl: user.avatarUrl,
-    joinedAt: user.joinedAt
+    joinedAt: user.joinedAt,
+    lastSeen: user.lastSeen
   }));
   io.emit('user:list', userList);
 }

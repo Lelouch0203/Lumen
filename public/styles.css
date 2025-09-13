@@ -1359,6 +1359,163 @@ body.light .section-header h3 { color: #111827; }
     min-width: 72px;
 }
 
+/* Room Members */
+.room-members {
+    padding: 15px;
+    border-bottom: 1px solid #444;
+    background: #3a3a3a;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.room-members h4 {
+    color: #ffffff;
+    margin-bottom: 10px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.member-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+}
+
+.member-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(96, 165, 250, 0.3);
+}
+
+.member-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+}
+
+.member-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #60a5fa, #3b82f6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: white;
+    font-size: 14px;
+}
+
+.member-details {
+    flex: 1;
+}
+
+.member-name {
+    font-weight: 500;
+    color: #e0e0e0;
+    font-size: 14px;
+}
+
+.member-status {
+    font-size: 12px;
+    color: #b0b0b0;
+    margin-top: 2px;
+}
+
+.member-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.member-btn {
+    background: #2563eb;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.member-btn:hover {
+    background: #1d4ed8;
+    transform: scale(1.05);
+}
+
+.member-btn.danger {
+    background: #dc3545;
+}
+
+.member-btn.danger:hover {
+    background: #c82333;
+}
+
+.member-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Light theme for room members */
+body.light .room-members {
+    background: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid #e5e7eb;
+}
+
+body.light .room-members h4 {
+    color: #111827;
+}
+
+body.light .member-item {
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+body.light .member-item:hover {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(37, 99, 235, 0.3);
+}
+
+body.light .member-name {
+    color: #111827;
+}
+
+body.light .member-status {
+    color: #6b7280;
+}
+
+body.light .member-btn {
+    background: #2563eb;
+    color: white;
+}
+
+body.light .member-btn:hover {
+    background: #1d4ed8;
+}
+
+body.light .member-btn.danger {
+    background: #dc3545;
+}
+
+body.light .member-btn.danger:hover {
+    background: #c82333;
+}
+
 /* File Transfer Progress */
 .file-progress {
     padding: 15px;
