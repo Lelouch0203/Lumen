@@ -1,4 +1,4 @@
-# WiFi Chat - Multi-User P2P Chat Application
+# LUMEN Chat - Multi-User P2P Chat Application
 
 A powerful peer-to-peer webchat application that works without internet, supporting many users with advanced features like WebRTC, file sharing, and offline support.
 
