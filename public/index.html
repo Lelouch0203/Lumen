@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WiFi Chat</title>
+    <title>Lumen Chat</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -27,7 +27,7 @@
     <div id="appContainer" class="hidden">
         <!-- Header -->
         <header class="app-header">
-            <h1 class="brand">WiFi Chat</h1>
+            <h1 class="brand"><span class="logo-text">Lumen Chat</span></h1>
             <div class="user-info">
                 <button id="discoverServersBtn" class="btn-secondary" title="Discover local servers">🔍 Discover</button>
                 <button id="themeToggleBtn" class="btn-secondary">Toggle Theme</button>
@@ -113,20 +113,30 @@
 
         </main>
 
-        <!-- Chat Panel (Sidebar) -->
+        <!-- Chat Panel (Full Screen) -->
         <aside id="chatPanel" class="chat-panel hidden">
             <div class="chat-header">
                 <span id="chatTitle"></span>
                 <button id="closeChatBtn" class="close-btn">&times;</button>
             </div>
-            <div class="chat-messages" id="chatMessages"></div>
-            <div class="typing-indicator hidden" id="typingIndicator">Someone is typing…</div>
-            <div class="chat-input-area">
-                <input type="file" id="fileInput" class="hidden" multiple>
-                <button id="attachFileBtn" class="attach-btn">📎</button>
-                <button id="emojiBtn" class="attach-btn" title="Insert emoji">😊</button>
-                <textarea id="messageInput" placeholder="Type a message..." class="message-input" rows="1"></textarea>
-                <button id="sendMessageBtn" class="send-btn">Send</button>
+            <div class="chat-content">
+                <div class="chat-main">
+                    <div class="chat-messages" id="chatMessages"></div>
+                    <div class="typing-indicator hidden" id="typingIndicator">Someone is typing…</div>
+                    <div class="chat-input-area">
+                        <input type="file" id="fileInput" class="hidden" multiple>
+                        <button id="attachFileBtn" class="attach-btn">📎</button>
+                        <button id="emojiBtn" class="attach-btn" title="Insert emoji">😊</button>
+                        <textarea id="messageInput" placeholder="Type a message..." class="message-input" rows="1"></textarea>
+                        <button id="sendMessageBtn" class="send-btn">Send</button>
+                    </div>
+                </div>
+                <div class="chat-sidebar">
+                    <div id="roomMembers" class="room-members hidden">
+                        <h4>Room Members</h4>
+                        <div class="members-list"></div>
+                    </div>
+                </div>
             </div>
             <div id="emojiPicker" class="emoji-picker hidden"></div>
             <div id="fileTransferProgress" class="file-progress hidden">

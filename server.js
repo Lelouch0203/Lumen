@@ -293,6 +293,23 @@ io.on('connection', (socket) => {
   });
 
 
+  // Request room list
+  socket.on('room:list:request', () => {
+    try {
+      const userId = socketToUser.get(socket.id);
+      if (!userId || !users.has(userId)) {
+        socket.emit('error', { message: 'User not found' });
+        return;
+      }
+      
+      // Send current room list to the requesting user
+      const roomList = Array.from(rooms.values()).map(room => serializeRoom(room));
+      socket.emit('room:list', roomList);
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to get room list' });
+    }
+  });
+
   // Room leave
   socket.on('room:leave', ({ roomId }) => {
     try {
@@ -697,7 +714,7 @@ function broadcastRoomList() {
 // Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`WiFi Chat server running on http://0.0.0.0:${PORT}`);
+  console.log(`Lumen Chat server running on http://0.0.0.0:${PORT}`);
   console.log(`Access from other devices on your network using your local IP address`);
 });
 function getLocalIp() {

@@ -242,15 +242,17 @@ class WiFiChat {
                 // Display message if chat is currently open
                 this.displayMessage(data.message, false);
             } else {
-                // Handle background message
+                // Handle background message (user is not in this chat room)
                 this.handleBackgroundMessage('room', data.roomId, data.message);
+                
+                // Only show notification if user is NOT in the same chat room and message is not from current user
+                if (data.message.userId !== this.currentUser.userId) {
+                    const roomName = this.rooms.get(data.roomId)?.name || 'room';
+                    this.showNotificationAlert(`New message in ${roomName}`, data.message.text, () => {
+                        this.startRoomChat(data.roomId);
+                    });
+                }
             }
-            
-            // Always show notification
-            const roomName = this.rooms.get(data.roomId)?.name || 'room';
-            this.showNotificationAlert(`New message in ${roomName}`, data.message.text, () => {
-                this.startRoomChat(data.roomId);
-            });
         });
 
         this.socket.on('room:message-edit', (data) => {
@@ -465,6 +467,11 @@ class WiFiChat {
 
         document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
         document.getElementById(tabName).classList.add('active');
+        
+        // Refresh room list when switching to public or private rooms tabs
+        if (tabName === 'public-rooms' || tabName === 'private-rooms') {
+            this.refreshRoomList();
+        }
     }
 
     // Room Management
@@ -531,6 +538,16 @@ class WiFiChat {
     }
 
     // Room List Updates
+    
+    refreshRoomList() {
+        // Repopulate room lists with existing room data
+        if (this.rooms.size > 0) {
+            this.updateRoomsList(Array.from(this.rooms.values()));
+        } else if (this.socket && this.socket.connected) {
+            // If no rooms in memory, request fresh room list from server
+            this.socket.emit('room:list:request');
+        }
+    }
 
     updateRoomsList(rooms) {
         const publicContainer = document.getElementById('publicRoomsList');
@@ -915,57 +932,57 @@ class WiFiChat {
         // Clear chat messages to prevent UI issues
         document.getElementById('chatMessages').innerHTML = '';
         document.getElementById('messageInput').value = '';
+        
+        // Hide room members section
+        const membersSection = document.getElementById('roomMembers');
+        if (membersSection) {
+            membersSection.classList.add('hidden');
+        }
     }
 
     displayRoomMembers(room) {
-        // Add a members section to the chat panel
-        let membersSection = document.getElementById('roomMembers');
-        if (!membersSection) {
-            membersSection = document.createElement('div');
-            membersSection.id = 'roomMembers';
-            membersSection.className = 'room-members';
-            membersSection.innerHTML = '<h4>Room Members</h4><div class="members-list"></div>';
+        // Show the room members section in the sidebar
+        const membersSection = document.getElementById('roomMembers');
+        if (membersSection) {
+            membersSection.classList.remove('hidden');
             
-            const chatMessages = document.getElementById('chatMessages');
-            chatMessages.parentNode.insertBefore(membersSection, chatMessages);
-        }
+            const membersList = membersSection.querySelector('.members-list');
+            membersList.innerHTML = '';
 
-        const membersList = membersSection.querySelector('.members-list');
-        membersList.innerHTML = '';
-
-        room.members.forEach(member => {
-            const memberDiv = document.createElement('div');
-            memberDiv.className = 'member-item';
-            
-            const isCurrentUser = member.id === this.currentUser.userId;
-            const hasDirectConnection = this.peerConnections.has(member.id);
-            
-            memberDiv.innerHTML = `
-                <div class="member-info">
-                    <div class="member-avatar">${member.name.charAt(0).toUpperCase()}</div>
-                    <div class="member-details">
-                        <div class="member-name">${this.escapeHtml(member.name)} ${isCurrentUser ? '(You)' : ''}</div>
-                        <div class="member-status">${hasDirectConnection ? 'Direct Connected' : 'Connected'}</div>
+            room.members.forEach(member => {
+                const memberDiv = document.createElement('div');
+                memberDiv.className = 'member-item';
+                
+                const isCurrentUser = member.id === this.currentUser.userId;
+                const hasDirectConnection = this.peerConnections.has(member.id);
+                
+                memberDiv.innerHTML = `
+                    <div class="member-info">
+                        <div class="member-avatar">${member.name.charAt(0).toUpperCase()}</div>
+                        <div class="member-details">
+                            <div class="member-name">${this.escapeHtml(member.name)} ${isCurrentUser ? '(You)' : ''}</div>
+                            <div class="member-status">${hasDirectConnection ? 'Direct Connected' : 'Connected'}</div>
+                        </div>
                     </div>
-                </div>
-                <div class="member-actions">
-                    ${!isCurrentUser ? `
-                        <button class="member-btn" onclick="app.initiateDirectConnection('${member.id}', '${room.id}')" 
-                                title="Start direct connection">
-                            🔗 Direct
-                        </button>
-                        ${hasDirectConnection ? `
-                            <button class="member-btn danger" onclick="app.closeDirectConnection('${member.id}')" 
-                                    title="Close direct connection">
-                                ❌ Close
+                    <div class="member-actions">
+                        ${!isCurrentUser ? `
+                            <button class="member-btn" onclick="app.initiateDirectConnection('${member.id}', '${room.id}')" 
+                                    title="Start direct connection">
+                                🔗 Direct
                             </button>
+                            ${hasDirectConnection ? `
+                                <button class="member-btn danger" onclick="app.closeDirectConnection('${member.id}')" 
+                                        title="Close direct connection">
+                                    ❌ Close
+                                </button>
+                            ` : ''}
                         ` : ''}
-                    ` : ''}
-                </div>
-            `;
-            
-            membersList.appendChild(memberDiv);
-        });
+                    </div>
+                `;
+                
+                membersList.appendChild(memberDiv);
+            });
+        }
     }
 
     sendMessage() {
