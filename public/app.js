@@ -311,9 +311,8 @@ class WiFiChat {
         document.getElementById('joinNetworkBtn').addEventListener('click', () => {
             const name = document.getElementById('displayNameInput').value.trim();
             const avatarUrl = document.getElementById('avatarUrlInput').value.trim();
-            const lightTheme = document.getElementById('themeToggleInput').checked;
             if (name) {
-                this.saveSession({ name, avatarUrl, lightTheme });
+                this.saveSession({ name, avatarUrl, lightTheme: false });
                 this.showApp();
                 this.connectToServer();
             }
